@@ -1270,41 +1270,105 @@ sub onChannelFocused()
     
     focusedIndex = m.channelList.itemFocused
     print ">>> PREVIEW: Channel focus = "; focusedIndex
-    
-    ' Skip reload if the channel is already active
-    if focusedIndex = m.lastFocusedChannel then return
-    m.lastFocusedChannel = focusedIndex
-    
+
     ' Retrieve the focused channel
     channel = getChannelByFocusIndex(focusedIndex)
     if channel <> invalid then
+        m.lastFocusedChannel = focusedIndex
         playPreviewChannel(focusedIndex)
     end if
 end sub
 
 function getChannelByFocusIndex(focusIndex as Integer) as Object
-    if m.channelList = invalid or m.channelList.content = invalid then return invalid
-    
-    content = m.channelList.content
+    return getChannelFromListItem(m.channelList, focusIndex)
+end function
+
+function getChannelFromListItem(list as Object, itemIndex as Integer) as Object
+    if list = invalid or list.content = invalid then return invalid
+
+    content = list.content
     if content.getChildCount() = 0 then return invalid
-    
+
     firstChild = content.getChild(0)
     if firstChild = invalid then return invalid
-    
-    ' If no groups exist (direct channels)
+
     if firstChild.getChildCount() = 0 then
-        return content.getChild(focusIndex)
-    else
-        ' There are groups, so we need to calculate the correct index using currFocusSection to determine the current section.
-        if m.channelList.currFocusSection <> invalid then
-            section = content.getChild(m.channelList.currFocusSection)
-            if section <> invalid then
-                ' itemFocused depends on the section
-                return section.getChild(focusIndex)
-            end if
+        if itemIndex >= 0 and itemIndex < content.getChildCount() then
+            return content.getChild(itemIndex)
+        end if
+
+        return invalid
+    end if
+
+    sectionIndex = 0
+    if list.currFocusSection <> invalid then
+        sectionIndex = list.currFocusSection
+    end if
+
+    if sectionIndex >= 0 and sectionIndex < content.getChildCount() then
+        section = content.getChild(sectionIndex)
+        sectionItemIndex = getSectionChildIndexForListItem(content, sectionIndex, itemIndex)
+
+        if section <> invalid and sectionItemIndex >= 0 and sectionItemIndex < section.getChildCount() then
+            return section.getChild(sectionItemIndex)
         end if
     end if
-    
+
+    return getChannelFromFlatListItem(content, itemIndex)
+end function
+
+function getSectionChildIndexForListItem(content as Object, sectionIndex as Integer, itemIndex as Integer) as Integer
+    if content = invalid then return -1
+    if sectionIndex < 0 or sectionIndex >= content.getChildCount() then return -1
+
+    section = content.getChild(sectionIndex)
+    if section = invalid then return -1
+
+    sectionCount = section.getChildCount()
+    if sectionCount = 0 then return -1
+
+    previousChannelCount = 0
+    if sectionIndex > 0 then
+        for i = 0 to sectionIndex - 1
+            previousSection = content.getChild(i)
+            if previousSection <> invalid then
+                previousChannelCount = previousChannelCount + previousSection.getChildCount()
+            end if
+        end for
+    end if
+
+    flatItemIndex = itemIndex - previousChannelCount
+    if flatItemIndex >= 0 and flatItemIndex < sectionCount then
+        return flatItemIndex
+    end if
+
+    if itemIndex >= 0 and itemIndex < sectionCount then
+        return itemIndex
+    end if
+
+    return -1
+end function
+
+function getChannelFromFlatListItem(content as Object, itemIndex as Integer) as Object
+    if content = invalid or itemIndex < 0 then return invalid
+
+    channelIndex = 0
+    for i = 0 to content.getChildCount() - 1
+        section = content.getChild(i)
+        if section = invalid then continue for
+
+        if section.getChildCount() = 0 then
+            if channelIndex = itemIndex then return section
+            channelIndex = channelIndex + 1
+        else
+            sectionCount = section.getChildCount()
+            if itemIndex < channelIndex + sectionCount then
+                return section.getChild(itemIndex - channelIndex)
+            end if
+            channelIndex = channelIndex + sectionCount
+        end if
+    end for
+
     return invalid
 end function
 
@@ -1312,28 +1376,9 @@ sub playPreviewChannel(channelIndex as Integer)
     if m.previewVideo = invalid then return
     if m.flatChannelList = invalid or m.flatChannelList.Count() = 0 then return
     
-    ' “Get channel from flat list using focus index
-    channel = invalid
-    
-    ' Get the channel directly from the list if possible
-    if m.channelList <> invalid and m.channelList.content <> invalid then
-        content = m.channelList.content
-        firstChild = content.getChild(0)
-        
-        if firstChild <> invalid and firstChild.getChildCount() = 0 then
-            ' No channel groups
-            if channelIndex >= 0 and channelIndex < content.getChildCount() then
-                channel = content.getChild(channelIndex)
-            end if
-        else
-            ' Groups present – use current section
-            if m.channelList.currFocusSection <> invalid then
-                section = content.getChild(m.channelList.currFocusSection)
-                if section <> invalid and channelIndex >= 0 and channelIndex < section.getChildCount() then
-                    channel = section.getChild(channelIndex)
-                end if
-            end if
-        end if
+    channel = getChannelByFocusIndex(channelIndex)
+    if channel = invalid and channelIndex >= 0 and channelIndex < m.flatChannelList.Count() then
+        channel = m.flatChannelList[channelIndex]
     end if
     
     if channel = invalid or channel.url = invalid then 
@@ -1397,21 +1442,8 @@ sub selectChannelFromList(list as Object)
         return
     end if
     
-    content = invalid
-    
-    if firstChild.getChildCount() = 0 then
-        content = list.content.getChild(list.itemSelected)
-        print ">>> SELECTCHANNEL: No group, itemSelected = "; list.itemSelected
-    else
-        itemSelected = list.itemSelected
-        sectionContent = list.content.getChild(list.currFocusSection)
-        if sectionContent = invalid then 
-            print ">>> SELECTCHANNEL ERROR: sectionContent invalid"
-            return
-        end if
-        content = sectionContent.getChild(itemSelected)
-        print ">>> SELECTCHANNEL: No groups, section = "; list.currFocusSection; ", item = "; itemSelected
-    end if
+    content = getChannelFromListItem(list, list.itemSelected)
+    print ">>> SELECTCHANNEL: section = "; list.currFocusSection; ", item = "; list.itemSelected
     
     if content = invalid then 
         print ">>> SELECTCHANNEL ERROR: Selected content is invalid"
