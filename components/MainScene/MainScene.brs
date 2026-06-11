@@ -50,6 +50,7 @@ sub init()
     m.overlayVisible = false
     m.lastFocusedChannel = -1
     m.pendingChannelUrl = invalid
+    m.suppressNextVideoOptionsMenu = false
     
     loadSavedPlaylists()
     setupPlaylistMenu()
@@ -153,7 +154,13 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
                 end if
             else if(key = "OK")
                 ' Display the options menu only when the video is already playing
-                if m.video.state = "playing" or m.video.state = "paused" or m.video.state = "buffering" then
+                if m.suppressNextVideoOptionsMenu then
+                    print ">>> KEY OK: Suppressing options menu after overlay channel selection"
+                    clearOverlayOkSuppression()
+                    result = true
+                else if m.overlayVisible then
+                    print ">>> KEY OK: Overlay visible, channel list handles selection"
+                else if m.video.state = "playing" or m.video.state = "paused" or m.video.state = "buffering" then
                     showVideoOptionsMenu()
                     result = true
                 end if
@@ -1423,9 +1430,35 @@ sub onChannelSelected()
 end sub
 
 sub onOverlayChannelSelected()
+    m.suppressNextVideoOptionsMenu = true
+    startOverlayOkSuppressionTimer()
     selectChannelFromList(m.channelOverlayList)
     m.channelOverlay.visible = false
     m.overlayVisible = false
+end sub
+
+sub startOverlayOkSuppressionTimer()
+    if m.overlayOkSuppressTimer <> invalid then
+        m.overlayOkSuppressTimer.control = "stop"
+        m.overlayOkSuppressTimer.unobserveField("fire")
+        m.overlayOkSuppressTimer = invalid
+    end if
+
+    m.overlayOkSuppressTimer = CreateObject("roSGNode", "Timer")
+    m.overlayOkSuppressTimer.duration = 0.5
+    m.overlayOkSuppressTimer.repeat = false
+    m.overlayOkSuppressTimer.observeField("fire", "clearOverlayOkSuppression")
+    m.overlayOkSuppressTimer.control = "start"
+end sub
+
+sub clearOverlayOkSuppression()
+    if m.overlayOkSuppressTimer <> invalid then
+        m.overlayOkSuppressTimer.control = "stop"
+        m.overlayOkSuppressTimer.unobserveField("fire")
+        m.overlayOkSuppressTimer = invalid
+    end if
+
+    m.suppressNextVideoOptionsMenu = false
 end sub
 
 sub selectChannelFromList(list as Object)

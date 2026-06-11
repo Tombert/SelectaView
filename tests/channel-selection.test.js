@@ -59,3 +59,26 @@ test("preview focus uses the same grouped-list resolver as selection", () => {
     /return getChannelFromListItem\(m\.channelList, focusIndex\)/
   );
 });
+
+test("overlay channel selection suppresses the scene-level OK options menu", () => {
+  const overlaySelectionMatch = mainSceneSource.match(
+    /sub onOverlayChannelSelected\(\)[\s\S]*?end sub/
+  );
+  const okKeyMatch = mainSceneSource.match(
+    /else if\(key = "OK"\)[\s\S]*?else if\(key = "play"\)/
+  );
+
+  assert.ok(overlaySelectionMatch, "onOverlayChannelSelected should exist");
+  assert.ok(okKeyMatch, "the full-screen OK key handler should exist");
+  assert.match(
+    overlaySelectionMatch[0],
+    /m\.suppressNextVideoOptionsMenu = true/
+  );
+  assert.match(okKeyMatch[0], /m\.suppressNextVideoOptionsMenu/);
+  assert.match(okKeyMatch[0], /clearOverlayOkSuppression\(\)/);
+  assert.ok(
+    okKeyMatch[0].indexOf("m.suppressNextVideoOptionsMenu") <
+      okKeyMatch[0].indexOf("showVideoOptionsMenu()"),
+    "OK suppression must run before showVideoOptionsMenu"
+  );
+});
